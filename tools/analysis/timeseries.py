@@ -59,209 +59,6 @@ def smooth(x, stype: Union[str, types.FunctionType], *args, **kwargs) -> pd.Seri
     return x_sm if isinstance(x_sm, pd.Series) else pd.Series(x_sm.flatten(), index=x.index)
 
 
-def find_movements(x, threshold, pcntg=0.75, t_window: Union[List, Tuple, int]=10,
-                   drop_out_of_market=True,
-                   drop_weekends_crossings=True,
-                   silent=False,
-                   use_prev_movement_size_for_percentage=True,
-                   result_as_frame=False, collect_log=False):
-    """
-    Tries to find all movements in timeseies x (should be pandas Series object) which have absolute magnitude >= threshold
-    and lasts not more than t_window bars.
-    If need to drop all movements covering out of market time (from 16:00 till 9:30 next day) set drop_out_of_market to True
-
-    # Example:
-    # -----------------
-
-    import pandas as pd
-    import numpy as np
-    import matplotlib
-    import matplotlib.pyplot as plt
-    from pylab import *
-
-    z = 50 + np.random.normal(0, 0.2, 1000).cumsum()
-    x = pd.Series(z, index=pd.date_range('1/1/2000 16:00:00', periods=len(z), freq='30s'))
-
-    i_drops, i_grows, _, _ = find_movements(x, threshold=1, t_window=120, pcntg=.75)
-
-    plt.figure(figsize=(15,10))
-
-    # plot series
-    plt.plot(x)
-
-    # plot movements
-    plt.plot(x.index[i_drops].T, x[i_drops].T, 'r--', lw=1.2);
-    plt.plot(x.index[i_grows].T, x[i_grows].T, 'w--', lw=1.2);
-
-    # or new version (after 2018-08-31)
-    trends = find_movements(x, threshold=1, t_window=120, pcntg=.75, result_as_indexes=False)
-    u, d = trends.UpTrends.dropna(), trends.DownTrends.dropna()
-    plt.plot([u.index, u.end], [u.start_price, u.end_price], 'w--', lw=0.7, marker='.', markersize=5);
-    plt.plot([d.index, d.end], [d.start_price, d.end_price], 'r--', lw=0.7);
-
-    plt.draw()
-    plt.show()
-
-    # -----------------
-
-    :param x: pandas Series object
-    :param threshold: movement minimal magnitude threshold
-    :param pcntg: percentage of previous movement (if use_prev_movement_size_for_percentage is True) that considered as start of new movement (1 == 100%)
-    :param use_prev_movement_size_for_percentage: False if use percentage from previous price extremum (otherwise it uses prev. movement) [True]
-    :param t_window: movement's length filter in bars or range: 120 or (0, 100) or (100, np.inf) etc
-    :param drop_out_of_market: True if need to drop movements between sessions
-    :param drop_weekends_crossings: True if need to drop movemets crossing weekends (for intraday data)
-    :param silent: if True it doesn't show progress bar [False by default]
-    :param result_as_frame: if False (default) result returned as tuple of indexes otherwise as DataFrame
-    :param collect_log: True if need to collect track of tops/bottoms at times when they appeared
-    :return: tuple with indexes of (droping movements, growing movements, droping magnitudes, growing magnitudes)
-    """
-
-    # check input arguments
-    if not isinstance(x, pd.Series):
-        x = pd.Series(x)
-
-    # drop nans (not sure about 0 as replacement)
-    if x.hasnans:
-        x = x.fillna(0)
-
-    mi, mx, direction = 0, 0, 0
-    i_drops, i_grows = [], []
-    log_rec = OrderedDict()
-    timeline = x.index
-
-    # check filter values
-    if isscalar(t_window):
-        t_window = [0, t_window]
-    elif len(t_window) != 2 or t_window[0] >= t_window[1]:
-        raise ValueError("t_window must have 2 ascending elements")
-
-    if not silent: print(' -[', end='')
-    n_p_len = max(int(len(x) / 100), 1)
-
-    for i in range(1, len(x)):
-        v = x.iat[i]
-
-        if direction <= 0:
-            if v < x.iat[mi]:
-                mi = i
-                direction = -1
-            else:
-                # floating up
-                if use_prev_movement_size_for_percentage:
-                    l_mv = pcntg * (x.iat[mx] - x.iat[mi])
-                else:
-                    l_mv = pcntg * x.iat[mi]
-
-                # check condition    
-                if (v - x.iat[mi] >= threshold) or (l_mv < v - x.iat[mi]):
-                    i_drops.append([mx, mi])
-                    if collect_log:
-                        log_rec[timeline[i]] = {'Type': '-', 'Time': timeline[mi], 'Price': x.iat[mi]}
-                    mx = i
-                    direction = 1
-
-        if direction >= 0:
-            if v > x.iat[mx]:
-                mx = i
-                direction = +1
-            else:
-                if use_prev_movement_size_for_percentage:
-                    l_mv = pcntg * (x.iat[mx] - x.iat[mi])
-                else:
-                    l_mv = pcntg * x.iat[mx]
-
-                if (x.iat[mx] - v >= threshold) or (l_mv < x.iat[mx] - v):
-                    i_grows.append([mi, mx])
-                    if collect_log:
-                        log_rec[timeline[i]] = {'Type': '+', 'Time': timeline[mx], 'Price': x.iat[mx]}
-                    mi = i
-                    direction = -1
-
-        if not silent and not (i % n_p_len): print(':', end='')
-
-    if not silent: print(']-')
-    i_drops = np.array(i_drops)
-    i_grows = np.array(i_grows)
-
-    # Nothing is found 
-    if len(i_drops) == 0 or len(i_grows) == 0: 
-        if not silent:
-            print("\n\t[WARNING] find_movements: No trends found for given conditions !")
-        return pd.DataFrame({'UpTrends':[], 'DownTrends':[]}) if result_as_frame else ([], [], [], [])
-
-    # retain only movements equal or exceed specified threshold
-    if not np.isinf(threshold):
-        if i_drops.size:
-            i_drops = i_drops[abs(x[i_drops[:, 1]].values - x[i_drops[:, 0]].values) >= threshold, :]
-        if i_grows.size:
-            i_grows = i_grows[abs(x[i_grows[:, 1]].values - x[i_grows[:, 0]].values) >= threshold, :]
-
-    # retain only movements which shorter than specified window
-    __drops_len = abs(i_drops[:, 1] - i_drops[:, 0])
-    __grows_len = abs(i_grows[:, 1] - i_grows[:, 0])
-    if i_drops.size: i_drops = i_drops[(__drops_len >= t_window[0]) & (__drops_len <= t_window[1]), :]
-    if i_grows.size: i_grows = i_grows[(__grows_len >= t_window[0]) & (__grows_len <= t_window[1]), :]
-
-    # filter out all movements which cover period from 16:00 till 9:30 next day
-    if drop_out_of_market and (isinstance(x, pd.Series) and isinstance(x.index, pd.DatetimeIndex)):
-        if i_drops.size:
-            h = x.index.hour[i_drops]
-            i_drops = i_drops[~((h[:, 0] <= 16) & (h[:, 1] >= 9))]
-        if i_grows.size:
-            h = x.index.hour[i_grows]
-            i_grows = i_grows[~((h[:, 0] <= 16) & (h[:, 1] >= 9))]
-
-    # drop crossed weekend if required (we would not want to drop them when use daily prices)
-    # drop if start < Sunday and end is Sunday. Drop if start and end are different weeks and start is not Sunday.
-    if drop_weekends_crossings:
-        if i_drops.size and (isinstance(x, pd.Series) and isinstance(x.index, pd.DatetimeIndex)):
-            d = x.index.dayofweek[i_drops]
-            w = x.index.week[i_drops]
-            i_drops = i_drops[~(((d[:, 0] < 6) & (d[:, 1] == 6)) | (w[:,0] != w[:,1]) & (d[:, 0] != 6))]
-        if i_grows.size and (isinstance(x, pd.Series) and isinstance(x.index, pd.DatetimeIndex)):
-            d = x.index.dayofweek[i_grows]
-            w = x.index.week[i_grows]
-            i_grows = i_grows[~(((d[:, 0] < 6) & (d[:, 1] == 6)) | (w[:,0] != w[:,1]) & (d[:, 0] != 6))]
-
-    # drops and grows magnitudes
-    v_drops = []
-    if i_drops.size:
-        v_drops = abs(x[i_drops[:, 1]].values - x[i_drops[:, 0]].values)
-
-    v_grows = []
-    if i_grows.size:
-        v_grows = abs(x[i_grows[:, 1]].values - x[i_grows[:, 0]].values)
-
-    # how to return results
-    if not result_as_frame:
-        # just raw indexes (by default)
-        return i_drops, i_grows, v_drops, v_grows
-    else:
-        i_d, i_g = x.index[i_drops], x.index[i_grows]
-        x_d, x_g = x[i_drops], x[i_grows]
-
-        d = pd.DataFrame(OrderedDict({
-            'start_price': x_d[:, 0],
-            'end_price': x_d[:, 1],
-            'delta': v_drops,
-            'end': i_d[:, 1]
-        }), index=i_d[:, 0])
-
-        g = pd.DataFrame(OrderedDict({
-            'start_price': x_g[:, 0],
-            'end_price': x_g[:, 1],
-            'delta': v_grows,
-            'end': i_g[:, 1]
-        }), index=i_g[:, 0])
-
-        trends = pd.concat((g, d), axis=1, keys=['UpTrends', 'DownTrends'])
-        if collect_log:
-            return trends, pd.DataFrame.from_dict(log_rec, orient='index')
-        
-        return trends
-
-
 def infer_series_frequency(series):
     """
     Infer frequency of given timeseries
@@ -752,68 +549,6 @@ def rolling_atr(x, window, periods, smoother=sma):
     return _tr
 
 
-def trend_detector(data, period, nstd, avg='sma', k_ext=1, exit_on_mid=False,
-                   use_atr=False, atr_period=12, atr_avg='kama') -> pd.DataFrame:
-    """
-    Trend detector method
-
-    :param data: input series/frame
-    :param period: bb period
-    :param nstd: bb num of stds
-    :param avg: averaging ma type
-    :param k_ext: extending factor
-    :param exit_on_mid: trend is over when x crosses middle of bb
-    :param use_atr: true if we use bollinger_atr for trend detecting
-    :param atr_period: ATR period (used only when use_atr is True)
-    :param atr_avg: ATR smoother (used only when use_atr is True)
-    :return: frame
-    """
-    # flatten list lambda
-    flatten = lambda l: [item for sublist in l for item in sublist]
-
-    # just taking close prices
-    x = data.close if isinstance(data, pd.DataFrame) else data
-
-    if use_atr:
-        midle, smax, smin = bollinger_atr(data, period, atr_period, nstd, avg, atr_avg)
-    else:
-        midle, smax, smin = bollinger(x, period, nstd, avg)
-
-    trend = (((x > smax.shift(1)) + 0.0) - ((x < smin.shift(1)) + 0.0)).replace(0, np.nan)
-
-    # some special case if we want to exit when close is on the opposite side of median price
-    if exit_on_mid:
-        lom, him = ((x < midle).values, (x > midle).values)
-        t = 0;
-        _t = trend.values.tolist()
-        for i in range(len(trend)):
-            t0 = _t[i]
-            t = t0 if np.abs(t0) == 1 else t
-            if (t > 0 and lom[i]) or (t < 0 and him[i]):
-                t = 0
-            _t[i] = t
-        trend = pd.Series(_t, trend.index)
-    else:
-        trend = trend.fillna(method='ffill').fillna(0.0)
-
-    # making resulting frame
-    m = x.to_frame().copy()
-    m['trend'] = trend
-    m['blk'] = (m.trend.shift(1) != m.trend).astype(int).cumsum()
-    m['x'] = abs(m.trend) * (smax * (-m.trend + 1) - smin * (1 + m.trend)) / 2
-    _g0 = m.reset_index().groupby(['blk', 'trend'])
-    m['x'] = flatten(abs(_g0['x'].apply(np.array).transform(np.minimum.accumulate).values))
-    m['utl'] = m.x.where(m.trend > 0)
-    m['dtl'] = m.x.where(m.trend < 0)
-
-    # signals
-    tsi = pd.DatetimeIndex(_g0['time'].apply(lambda x: x.values[0]).values)
-    m['uts'] = m.loc[tsi].utl
-    m['dts'] = m.loc[tsi].dtl
-
-    return m.filter(items=['uts', 'dts', 'trend', 'utl', 'dtl'])
-
-
 def denoised_trend(x: pd.DataFrame, period: int, window=0, mean: str='kama', bar_returns: bool=True) -> pd.Series:
     """
     Returns denoised trend (T_i).
@@ -877,66 +612,6 @@ def rolling_percentiles(x, window, pctls=(0, 1, 2, 3, 5, 10, 15, 25, 45, 50, 55,
         i += 1
 
     return pd.DataFrame(r, index=x.index, columns=['Q%d' % q for q in pctls])
-
-
-def trend_locker(y, order, window, lock_forward_window=1, use_projections=False, as_frame=True):
-    """
-    Trend locker indicator based on OLS.
-
-    :param y: series data
-    :param order: OLS order (1 - linear, 2 - squared etc)
-    :param window: rolling window for regression
-    :param lock_forward_window: how many forward points to lock (default is 1)
-    :param use_projections: if need to get regression projections as well (False)
-    :param as_frame: true if need to force converting result to DataFrame (True)
-    :return: (residuals, projections, r2, betas)
-    """
-
-    if lock_forward_window < 1:
-        raise ValueError('lock_forward_window must be positive non zero integer')
-        
-    n = window + lock_forward_window
-    yy = running_view(column_vector(y).T[0], window=n)
-    n_pts = len(y)
-    resid = nans((n_pts, lock_forward_window))
-    proj = nans((n_pts, lock_forward_window)) if use_projections else None
-    r_sqr = nans(n_pts)
-    betas = nans((n_pts, order + 1))
-
-    for i, p in enumerate(yy):
-        x = np.vander(np.linspace(-1, 1, n), order + 1)
-        lr = OLS(p[:window], x[:window, :]).fit()
-        
-        r_sqr[window - 1 + i] = lr.rsquared
-        betas[window - 1 + i, :] = lr.params
-
-        pl = p[-lock_forward_window:]
-        xl = x[-lock_forward_window:, :]
-        fwd_prj = np.sum(lr.params * xl, axis=1)
-        fwd_data = pl - fwd_prj
-        
-        # store forward data
-        np.fill_diagonal(resid[window + i : n + i + 1, :], fwd_data)
-
-        # if we asked for projections
-        if use_projections:
-            np.fill_diagonal(proj[window + i : n + i + 1, :], fwd_prj)
-            
-    if as_frame and not isinstance(y, pd.Series):
-        y = pd.Series(y, name='X')
-    
-    # return pandas frame if input is series/frame
-    if isinstance(y, pd.Series):
-        y_idx = y.index
-        f_res = pd.DataFrame(data=resid, index=y_idx, columns=['R%d' % i for i in range(1, lock_forward_window + 1)])
-        f_prj = None
-        if use_projections:
-            f_prj = pd.DataFrame(data=proj, index=y_idx, columns=['L%d' % i for i in range(1, lock_forward_window + 1)])
-        r = pd.DataFrame({'r2': r_sqr}, index=y_idx, columns=['r2'])
-        betas_fr = pd.DataFrame(betas, index=y_idx, columns=['b%d' % i for i in range(order + 1)])
-        return pd.concat((y, f_res, f_prj, r, betas_fr), axis=1)
-
-    return resid, proj, r_sqr, betas
 
 
 def __slope_ols(x):
@@ -1059,40 +734,38 @@ def rsi(x, periods, smoother=sma):
     return 100 * mu / (mu + md)
 
 
-def pivot_point(data, method='classic'):
+def pivot_point(data, method='classic', timeframe='D', timezone='EET'):
     """
-    Pivot points indicator  based on daily data
+    Pivot points indicator based on {daily, weekly or monthy} data
     it supports 'classic', 'woodie' and 'camarilla' species
     """
-    freq_sec = pd.Timedelta(data.index.freq).total_seconds()
-    if np.isnan(freq_sec) or freq_sec < 3600 * 24:
-        x = ohlc_resample(data, "1D", resample_tz="EET")
-    elif freq_sec > 3600 * 24:
-        raise ValueError("Input series must be resampled in days bars or less")
-    else:
-        x = data
+    if timeframe not in ['D', 'W', 'M']:
+        raise ValueError("Wrong timeframe parameter value, only 'D', 'W' and 'M' allowed")
+        
+    x = ohlc_resample(data, f'1{timeframe}', resample_tz=timezone)
+    
     pp = pd.DataFrame()
     if method == 'classic':
         pvt = (x.high + x.low + x.close) / 3
         _range = x.high - x.low
-        
+
         pp['R4'] = pvt + 3 * _range
         pp['R3'] = pvt + 2 * _range
-        pp['R2'] = pvt + _range 
+        pp['R2'] = pvt + _range
         pp['R1'] = pvt * 2 - x.low
-        pp['P']  = pvt
+        pp['P'] = pvt
         pp['S1'] = pvt * 2 - x.high
         pp['S2'] = pvt - _range
         pp['S3'] = pvt - 2 * _range
         pp['S4'] = pvt - 3 * _range
-        
+
         # rearrange
-        pp = pp[['R4','R3','R2','R1','P','S1','S2','S3','S4']]
-        
+        pp = pp[['R4', 'R3', 'R2', 'R1', 'P', 'S1', 'S2', 'S3', 'S4']]
+
     elif method == 'woodie':
         pvt = (x.high + x.low + x.open + x.open) / 4
         _range = x.high - x.low
-        
+
         pp['R3'] = x.high + 2 * (pvt - x.low)
         pp['R2'] = pvt + _range
         pp['R1'] = pvt * 2 - x.low
@@ -1100,8 +773,8 @@ def pivot_point(data, method='classic'):
         pp['S1'] = pvt * 2 - x.high
         pp['S2'] = pvt - _range
         pp['S3'] = x.low + 2 * (x.high - pvt)
-        pp = pp[['R3','R2','R1','P','S1','S2','S3']]
-        
+        pp = pp[['R3', 'R2', 'R1', 'P', 'S1', 'S2', 'S3']]
+
     elif method == 'camarilla':
         """
             R4 = C + RANGE * 1.1/2
@@ -1116,7 +789,7 @@ def pivot_point(data, method='classic'):
         """
         pvt = (x.high + x.low + x.close) / 3
         _range = x.high - x.low
-        
+
         pp['R4'] = x.close + _range * 1.1 / 2
         pp['R3'] = x.close + _range * 1.1 / 4
         pp['R2'] = x.close + _range * 1.1 / 6
@@ -1126,7 +799,7 @@ def pivot_point(data, method='classic'):
         pp['S2'] = x.close - _range * 1.1 / 6
         pp['S3'] = x.close - _range * 1.1 / 4
         pp['S4'] = x.close - _range * 1.1 / 2
-        pp = pp[['R4','R3','R2','R1','P','S1','S2','S3','S4']]
+        pp = pp[['R4', 'R3', 'R2', 'R1', 'P', 'S1', 'S2', 'S3', 'S4']]
     else:
         raise ValueError("Unknown method %s. Available methods is classic, woodie, camarilla" % method)
 
@@ -1158,103 +831,3 @@ def intraday_min_max(data):
     x = x.tz_convert('EET')
     return x.groupby(x.index.date).apply(_day_min_max).tz_convert(source_tz)
 
-@njit
-def _laguerre_calc(xx, g):
-    l0, l1, l2, l3, f = np.zeros(len(xx)), np.zeros(len(xx)), np.zeros(len(xx)), np.zeros(len(xx)), np.zeros(
-        len(xx))
-    for i in range(1, len(xx)):
-        l0[i] = (1 - g) * xx[i] + g * l0[i - 1]
-        l1[i] = -g * l0[i] + l0[i - 1] + g * l1[i - 1]
-        l2[i] = -g * l1[i] + l1[i - 1] + g * l2[i - 1]
-        l3[i] = -g * l2[i] + l2[i - 1] + g * l3[i - 1]
-        f[i] = (l0[i] + 2 * l1[i] + 2 * l2[i] + l3[i]) / 6
-    return f
-
-def laguerre_filter(x, gamma=0.8):
-    """
-    Laguerre 4 pole IIR filter
-    """
-    return pd.Series(_laguerre_calc(x.values.flatten(), gamma), x.index)
-
-@njit
-def _lrsi_calc(xx, g):
-    l0, l1, l2, l3, f = np.zeros(len(xx)), np.zeros(len(xx)), np.zeros(len(xx)), np.zeros(len(xx)), np.zeros(
-        len(xx))
-    for i in range(1, len(xx)):
-        l0[i] = (1 - g) * xx[i] + g * l0[i - 1]
-        l1[i] = -g * l0[i] + l0[i - 1] + g * l1[i - 1]
-        l2[i] = -g * l1[i] + l1[i - 1] + g * l2[i - 1]
-        l3[i] = -g * l2[i] + l2[i - 1] + g * l3[i - 1]
-
-        _cu, _cd = 0, 0
-        _d0 = l0[i] - l1[i]
-        _d1 = l1[i] - l2[i]
-        _d2 = l2[i] - l3[i]
-
-        if _d0 >= 0:
-            _cu = _d0
-        else:
-            _cd = np.abs(_d0)
-
-        if _d1 >= 0:
-            _cu += _d1
-        else:
-            _cd += np.abs(_d1)
-
-        if _d2 >= 0:
-            _cu += _d2
-        else:
-            _cd += np.abs(_d2)
-
-        f[i] = 100 * _cu / (_cu + _cd) if (_cu + _cd) != 0 else 0
-
-    return f
-
-def lrsi(x, gamma=0.5):
-    """
-    Laguerre RSI
-    """
-    return pd.Series(_lrsi_calc(x.values.flatten(), gamma), x.index)
-
-@njit
-def calc_ema_time(t, vv, period, min_time_quant, with_correction=True):
-    index = np.empty(len(vv) - 1, dtype=np.float64)
-    values = np.empty(len(vv) - 1, dtype=np.float64)
-    dt = np.diff(t)
-    dt[dt == 0] = min_time_quant
-    a = dt / period
-    u = np.exp(-a)
-    _ep = vv[0]
-
-    if with_correction:
-        v = (1 - u) / a
-        c1 = v - u
-        c2 = 1 - v
-        for i in range(0, len(vv) - 1):
-            _ep = u[i] * _ep + c1[i] * vv[i] + c2[i] * vv[i + 1]
-            index[i] = t[i + 1]
-            values[i] = _ep
-    else:
-        v = 1 - u
-        for i in range(0, len(vv) - 1):
-            _ep = _ep + v[i] * (vv[i + 1] - _ep)
-            index[i] = t[i + 1]
-            values[i] = _ep
-    return index, values
-
-
-def ema_time(x, period, min_time_quant=pd.Timedelta('1ms'), with_correction=True):
-    t = x.index.values
-    vv = x.values
-    if not isinstance(x, pd.Series):
-        raise ValueError('Input series must be instance of pandas Series class')
-
-    if isinstance(period, str):
-        period = pd.Timedelta(period)
-
-    index, values = calc_ema_time(t.astype('float64'), vv, period.value, min_time_quant.value, with_correction)
-
-    old_ser_name = 'UnknownSeries' if x.name is None else x.name
-    res = pd.Series(values, pd.to_datetime(index), name='EMAT_%d_sec_%s' % (period.seconds, old_ser_name))
-    res = res.loc[~res.index.duplicated(keep='first')]
-    return res

@@ -361,3 +361,63 @@ def roll(df: pd.DataFrame, w: int, **kwargs):
     })
 
     return rolled_df.groupby(level=0, **kwargs)
+
+
+def drop_duplicated_indexes(df, keep='first'):
+    """
+    Drops duplicated indexes in dataframe/series
+    Keeps either first or last occurence (parameter keep)
+    """
+    return df[~df.index.duplicated(keep=keep)]
+
+
+def scols(*xs, keys=None, names=None, keep='all'):
+    """
+    Concat dataframes/series from xs into single dataframe by axis 1
+    :param keys: keys of new dataframe (see pd.concat's keys parameter)
+    :param names: new column names or dict with replacements
+    :return: combined dataframe
+    
+    Example
+    -------
+    >>>  scols(
+            pd.DataFrame([1,2,3,4,-4], list('abcud')),
+            pd.DataFrame([111,21,31,14], list('xyzu')), 
+            pd.DataFrame([11,21,31,124], list('ertu')), 
+            pd.DataFrame([11,21,31,14], list('WERT')), 
+            names=['x', 'y', 'z', 'w'])
+    """
+    r = pd.concat((xs), axis=1, keys=keys)
+    if names:
+        if isinstance(names, (list, tuple)):
+            if len(names) == len(r.columns):
+                  r.columns = names
+            else:
+                raise ValueError(f"if 'names' contains new column names it must have same length as resulting df ({len(r.columns)})")
+        elif isinstance(names, dict):
+            r = r.rename(columns=names)
+    return r
+
+
+def srows(*xs, keep='all', sort=True):
+    """
+    Concat dataframes/series from xs into single dataframe by axis 0
+    :param sort: if true it sorts resulting dataframe by index (default)
+    :param keep: how to deal with duplicated indexes. 
+                 If set to 'all' it doesn't do anything (default). Otherwise keeps first or last occurences
+    :return: combined dataframe
+    
+    Example
+    -------
+    >>>  srows(
+            pd.DataFrame([1,2,3,4,-4], list('abcud')),
+            pd.DataFrame([111,21,31,14], list('xyzu')), 
+            pd.DataFrame([11,21,31,124], list('ertu')), 
+            pd.DataFrame([11,21,31,14], list('WERT')), 
+            sort=True, keep='last')
+    """
+    r = pd.concat((xs), axis=0)
+    r = r.sort_index() if sort else r
+    if keep != 'all':
+        r = drop_duplicated_indexes(r, keep=keep)
+    return r
