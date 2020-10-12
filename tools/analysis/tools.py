@@ -421,3 +421,26 @@ def srows(*xs, keep='all', sort=True):
     if keep != 'all':
         r = drop_duplicated_indexes(r, keep=keep)
     return r
+
+
+def retain_columns_and_join(data: dict, columns):
+    """
+    Retains given columns from every value of data dictionary and concatenate them into single data frame    
+
+    from ira.datasource import DataSource
+    from ira.analysis.tools import retain_columns_and_join 
+
+    ds = DataSource('yahoo::daily')
+    data = ds.load_data(['aapl', 'msft', 'spy'], '2000-01-01', 'now')
+
+    closes = retain_columns_and_join(data, 'close')
+    hi_lo = retain_columns_and_join(data, ['high', 'low'])
+
+    :param data: dictionary with dataframes  
+    :param columns: columns names need to be retained 
+    :return: data frame 
+    """
+    if not isinstance(data, dict):
+        raise ValueError('Data must be passed as dictionary')
+
+    return pd.concat([data[k][columns] for k in data.keys()], axis=1, keys=data.keys())

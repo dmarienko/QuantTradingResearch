@@ -69,8 +69,15 @@ def update_binance_data(client, symbol, timeframe='1M', step='4W', timeout_sec=5
     return df
 
 
-def load_binance_data(symbol, timeframe, start='2017-01-01', end='2100-01-01', path='./'):
+def load_binance_data(symbols, timeframe, start='2017-01-01', end='2100-01-01', path='../data'):
+    """
+    Loads OHLCV data for symbols (or symbol) from SQLite3 cache
+    """
+    data = {}
+    symbols = [symbols] if isinstance(symbols, str) else symbols
     with sqlite3.connect(__get_database_path('binance', timeframe, path)) as db:
-        data = pd.read_sql_query(f"SELECT * FROM {symbol.upper()} where time >= '{start}' and time <= '{end}'", db, index_col='time')
-    data.index = pd.DatetimeIndex(data.index)
+        for s in symbols:
+            ds = pd.read_sql_query(f"SELECT * FROM {s.upper()} where time >= '{start}' and time <= '{end}'", db, index_col='time')
+            ds.index = pd.DatetimeIndex(ds.index)
+            data[s] = ds
     return data

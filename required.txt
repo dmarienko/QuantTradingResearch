@@ -1,0 +1,16 @@
+# There is list of required packages
+numpy
+pandas
+pandas-datareader
+sklearn
+matplotlib
+statsmodels
+patool
+airspeed
+bs4
+dill
+numba
+seaborn
+tqdm
+python-binance
+
