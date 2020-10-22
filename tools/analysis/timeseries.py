@@ -742,7 +742,8 @@ def pivot_point(data, method='classic', timeframe='D', timezone='EET'):
     if timeframe not in ['D', 'W', 'M']:
         raise ValueError("Wrong timeframe parameter value, only 'D', 'W' and 'M' allowed")
         
-    x = ohlc_resample(data, f'1{timeframe}', resample_tz=timezone)
+    tf_resample = f'1{timeframe}'
+    x = ohlc_resample(data, tf_resample, resample_tz=timezone)
     
     pp = pd.DataFrame()
     if method == 'classic':
@@ -801,19 +802,19 @@ def pivot_point(data, method='classic', timeframe='D', timezone='EET'):
         pp['S4'] = x.close - _range * 1.1 / 2
         pp = pp[['R4', 'R3', 'R2', 'R1', 'P', 'S1', 'S2', 'S3', 'S4']]
     else:
-        raise ValueError("Unknown method %s. Available methods is classic, woodie, camarilla" % method)
+        raise ValueError("Unknown method %s. Available methods are classic, woodie, camarilla" % method)
 
-    pp.index = pp.index + pd.Timedelta('1D')
-
+    pp.index = pp.index + pd.Timedelta(tf_resample)
     return data.combine_first(pp).fillna(method='ffill')[pp.columns]
 
-def intraday_min_max(data):
+
+def intraday_min_max(data, timezone='EET'):
     """
-    min and max values intraday
+    Intradeay min and max values
     :param data: ohlcv series
     :return: series with min and max values intraday
     """
-    
+
     if not (isinstance(data, pd.DataFrame) and sum(data.columns.isin(['open', 'high', 'low', 'close'])) == 4):
         raise ValueError("Input series must be DataFrame within 'open', 'high', 'low' and 'close' columns defined !")
 
@@ -828,6 +829,6 @@ def intraday_min_max(data):
     else:
         x = data
 
-    x = x.tz_convert('EET')
+    x = x.tz_convert(timezone)
     return x.groupby(x.index.date).apply(_day_min_max).tz_convert(source_tz)
 
