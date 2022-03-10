@@ -6,6 +6,6 @@ Some quantitative models research and applicatins to trading.
 - [Russel1000 Index tracking and arbitrage trading](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/2.%20Russel%20Index%20Tracking.ipynb)
 - [Correlation of bitcoin price series and blockchain data](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/3.1%20CryptCorrellations.ipynb)
 - [Google trends data and Bitcoin prices / predictive model](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/3.2%20CryptCorrellations.ipynb)
-- Patterns detectors
+- [Patterns detecting](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/4.0%20Patterns%20Identification.ipynb)
 - Candlestick patterns statistics
 - Different stochastic models calibration experiments
