@@ -1,0 +1,12 @@
+{
+    "kdb::ftx.quotes": {
+        "type" : "kdb",
+        "host" : "localhost",
+        "db_path" : "/var/databases/kdb/ftx/quotes",
+        "ports_from": 6700,
+        "ports_to": 6790,
+        "init": "../../../data/databases_scripts/quotes.q",
+        "timeout" : 30,
+        "load_by_days":true
+    }
+}
