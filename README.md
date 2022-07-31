@@ -8,5 +8,6 @@ Some quantitative models research and applicatins to trading.
 - [Google trends data and Bitcoin prices / predictive model](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/3.2%20CryptCorrellations.ipynb)
 - [Patterns detecting](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/4.0%20Patterns%20Identification.ipynb)
 - [Funding rates arbitrage](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/5.%20Funding%20rates%20EDA.ipynb)
+- [Pair arbitrage on FTX futures](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/statarb/1.%20Trading%20Model.ipynb)
 - Candlestick patterns statistics
 - Different stochastic models calibration experiments
