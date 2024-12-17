@@ -12,3 +12,4 @@ Some quantitative models research and applicatins to trading.
 - Candlestick patterns statistics
 - Different stochastic models calibration experiments
 - [Turtles trading model](https://github.com/dmarienko/cryptomomentum)
+- Breakout model and risk management [Lustre Chandelier model](https://github.com/dmarienko/Lustre)
