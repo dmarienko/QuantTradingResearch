@@ -1,5 +1,5 @@
 # QuantTradingResearch
-Some quantitative models research and applicatins to trading.
+Some quantitative models research and applications to trading.
 
 - [Gaps trading model for crypto market](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/1.%20Daily%20Gaps%20Research.ipynb)
 - [Daily Gaps trading model for stock market](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/1.1%20Daily%20Gaps%20trading%20on%20stock%20market.ipynb)
@@ -13,3 +13,4 @@ Some quantitative models research and applicatins to trading.
 - Different stochastic models calibration experiments
 - [Turtles trading model](https://github.com/dmarienko/cryptomomentum)
 - Breakout model and risk management [Lustre Chandelier model](https://github.com/dmarienko/Lustre)
+- Cash and Carry strategy research materials for crypto assets [Crypto Cash Carry Profiting](https://github.com/dmarienko/c3p)
