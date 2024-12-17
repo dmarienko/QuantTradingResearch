@@ -11,3 +11,4 @@ Some quantitative models research and applicatins to trading.
 - [Pair arbitrage on FTX futures](https://github.com/dmarienko/QuantTradingResearch/blob/master/models/statarb/1.%20Trading%20Model.ipynb)
 - Candlestick patterns statistics
 - Different stochastic models calibration experiments
+- [Turtles trading model](https://github.com/dmarienko/cryptomomentum)
